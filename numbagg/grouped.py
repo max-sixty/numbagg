@@ -5,7 +5,7 @@ from .decorators import groupndreduce
 
 @groupndreduce.wrap()
 def group_nanmean(values, labels, out):
-    counts = np.zeros(out.shape, dtype=labels.dtype)
+    counts = np.zeros(out.shape, dtype=np.int64)
     out[:] = 0.0
 
     for indices in np.ndindex(values.shape):
@@ -29,6 +29,8 @@ def group_nanmean(values, labels, out):
 @groupndreduce.wrap()
 def group_nansum(values, labels, out):
     out[:] = 0
+    # labels = labels.astype(np.int64)
+    # values = values.astype(np.int64)
     for indices in np.ndindex(values.shape):
         label = labels[indices]
         if label < 0:
@@ -46,7 +48,8 @@ def group_nancount(values, labels, out):
         label = labels[indices]
         if label < 0:
             continue
-        if not np.isnan(values[indices]):
+        value = values[indices]
+        if not np.isnan(value):
             out[label] += 1
 
 
@@ -150,7 +153,7 @@ def group_nansum_of_squares(values, labels, out):
 def group_nanvar(values, labels, out):
     sums = np.zeros(out.shape, dtype=values.dtype)
     sums_of_squares = np.zeros(out.shape, dtype=values.dtype)
-    counts = np.zeros(out.shape, dtype=labels.dtype)
+    counts = np.zeros(out.shape, dtype=np.int64)
     out[:] = np.nan
 
     # Calculate sums, sum of squares, and counts
@@ -181,7 +184,7 @@ def group_nanstd(values, labels, out):
     # Copy-pasted from `group_nanvar`
     sums = np.zeros(out.shape, dtype=values.dtype)
     sums_of_squares = np.zeros(out.shape, dtype=values.dtype)
-    counts = np.zeros(out.shape, dtype=labels.dtype)
+    counts = np.zeros(out.shape, dtype=np.int64)
     out[:] = np.nan
 
     # Calculate sums, sum of squares, and counts

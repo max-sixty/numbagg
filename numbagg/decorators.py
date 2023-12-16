@@ -545,7 +545,8 @@ class groupndreduce(NumbaBase):
         # Different functions initialize with different values — e.g. `sum` uses 0,
         # while `prod` uses 1. So we don't initialize with a value here, and instead
         # rely on the function to do so.
-        result = np.empty(broadcast_shape + (num_labels,), values.dtype)
+        # result = np.empty(broadcast_shape + (num_labels,), values.dtype)
+        result = np.zeros(broadcast_shape + (num_labels,), values.dtype)
         gufunc(values, labels, result)
         return result
 

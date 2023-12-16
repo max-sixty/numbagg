@@ -373,15 +373,23 @@ def test_int8_again(dtype):
             [6, 6, 6, 6, 6, 7, 7, 7, 7, 7],
             [8, 8, 8, 8, 8, 9, 9, 9, 9, 10],
         ],
+        dtype=np.int64,
+        # dtype=np.float64,
     )
     by = np.array([0, 0, 0, 1, 1, 2, 2, 3, 3, 3], dtype=dtype)
 
-    expected = pd.DataFrame(array.T).groupby(by).sum().T.astype(dtype)
+    expected = pd.DataFrame(array.T).groupby(by).count().T.astype(dtype)
 
     # https://github.com/numbagg/numbagg/issues/213
-    assert_almost_equal(group_nansum(array, by, axis=-1), expected)
+    assert_almost_equal(group_nancount(array, by, axis=-1), expected)
     # Amazingly it can also be more incorrect with another run!
-    assert_almost_equal(group_nansum(array, by, axis=-1), expected)
+    assert_almost_equal(group_nancount(array, by, axis=-1), expected)
+
+    expected = pd.DataFrame(array.T).groupby(by).sum().T.astype(dtype)
+    result = group_nansum(array, by, axis=-1)
+    assert_almost_equal(result, expected)
+    result = group_nansum(array, by, axis=-1)
+    assert_almost_equal(result, expected)
 
 
 def test_dimensionality():
