@@ -32,7 +32,6 @@ from .. import (
     group_nanvar,
     move_corr,
     move_cov,
-    # move_count,
     move_exp_nancorr,
     move_exp_nancount,
     move_exp_nancov,
@@ -40,6 +39,8 @@ from .. import (
     move_exp_nanstd,
     move_exp_nansum,
     move_exp_nanvar,
+    # move_count,
+    move_max,
     move_mean,
     move_std,
     move_sum,
@@ -256,6 +257,17 @@ COMPARISONS: dict[Callable, dict[str, Callable]] = {
             move_exp_nancov, a, alpha=alpha, **kwargs
         ),
     ),
+    move_max: dict(
+        pandas=lambda a, **kwargs: pandas_move_setup(
+            lambda df: df.max().T, a, **kwargs
+        ),
+        numbagg=lambda a, window=20, **kwargs: partial(
+            move_max, a, window=window, **kwargs
+        ),
+        bottleneck=lambda a, window=20, **kwargs: partial(
+            bn.move_max, a, window=window, **kwargs
+        ),
+    ),
     move_mean: dict(
         pandas=lambda a, **kwargs: pandas_move_setup(
             lambda df: df.mean().T, a, **kwargs
@@ -398,7 +410,7 @@ COMPARISONS: dict[Callable, dict[str, Callable]] = {
     group_nansum_of_squares: dict(
         pandas=pandas_nan_sum_of_squares_setup,
         numbagg=partial(numbagg_group_setup, group_nansum_of_squares),
-    )
+    ),
     # move_count: dict(
     #     pandas=dict(
     #         setup=pandas_move_setup,

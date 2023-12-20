@@ -251,3 +251,59 @@ def move_corr(a, b, window, min_count, out):
 
         else:
             out[i] = np.nan
+
+
+import heapq
+
+
+@ndmoving(
+    [
+        # (float32[:], int64, int64, float32[:]),
+        (float64[:], int64, int64, float64[:]),
+    ]
+)
+def move_max(arr, window, min_count, out):
+    count = 0  # Count of non-NaN values in the current window
+    max_heap = [(-np.inf, -1)]  # Initialize with a dummy tuple
+    heapq.heappop(max_heap)  # Remove the dummy tuple
+
+    for i in range(window):
+        ai = arr[i]
+        if not np.isnan(ai):
+            heapq.heappush(max_heap, (-ai, i))
+            count += 1
+        if count >= min_count:
+            out[i] = -max_heap[0][0]
+        else:
+            out[i] = np.nan
+
+    for i in range(window, len(arr)):
+        ai = arr[i]
+        aold = arr[i - window]
+
+        ai_valid = not np.isnan(ai)
+        aold_valid = not np.isnan(aold)
+
+        # If the new value is valid, add it to the heap
+        if ai_valid:
+            heapq.heappush(max_heap, (-ai, i))
+            count += 1
+
+        # If the old value was valid, remove it from the heap
+        if aold_valid:
+            count -= 1
+
+        # Clean up the heap: remove old elements if necessary
+        while max_heap and max_heap[0][1] <= i - window:
+            heapq.heappop(max_heap)
+
+        # Set the output value
+        if count >= min_count:
+            out[i] = -max_heap[0][0]
+        else:
+            out[i] = np.nan
+
+
+# # Test the function again
+# result = rolling_max(test_array, window)
+# result, result == expected_output

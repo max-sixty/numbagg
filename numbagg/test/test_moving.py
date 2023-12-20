@@ -8,6 +8,7 @@ from numpy.testing import assert_allclose
 from numbagg import (
     move_corr,
     move_cov,
+    move_max,
     move_mean,
     move_std,
     move_sum,
@@ -27,7 +28,7 @@ def rand_array(rs):
 
 @pytest.mark.parametrize(
     "func",
-    [move_mean, move_sum, move_std, move_var, move_cov, move_corr],
+    [move_mean, move_sum, move_std, move_var, move_cov, move_corr, move_max],
 )
 @pytest.mark.parametrize("window", [10, 50])
 @pytest.mark.parametrize("min_count", [None, 0, 1, 3, "window"])

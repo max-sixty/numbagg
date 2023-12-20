@@ -34,7 +34,15 @@ from .grouped import (
     group_nansum_of_squares,
     group_nanvar,
 )
-from .moving import move_corr, move_cov, move_mean, move_std, move_sum, move_var
+from .moving import (
+    move_corr,
+    move_cov,
+    move_max,
+    move_mean,
+    move_std,
+    move_sum,
+    move_var,
+)
 from .moving_exp import (
     move_exp_nancorr,
     move_exp_nancount,
@@ -108,5 +116,6 @@ __all__ = [
     "move_exp_nanvar",
     "move_exp_nanstd",
     "move_mean",
+    "move_max",
     "__version__",
 ]

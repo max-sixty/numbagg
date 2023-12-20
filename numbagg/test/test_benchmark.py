@@ -1,7 +1,10 @@
 import numpy as np
 import pytest
 
-from .. import bfill, ffill
+from .. import (
+    bfill,
+    ffill,
+)
 
 
 @pytest.fixture(
