@@ -2,7 +2,6 @@ import logging
 from functools import partial
 
 import numpy as np
-import pandas as pd
 import pytest
 from numpy.testing import (
     assert_allclose,
@@ -27,6 +26,7 @@ from numbagg import (
     nansum,
     nanvar,
 )
+from numbagg.moving_exp import move_exp_nanmean
 from numbagg.test.util import arrays
 
 from .conftest import COMPARISONS
@@ -34,21 +34,14 @@ from .conftest import COMPARISONS
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope="module")
-def rand_array(rs):
-    arr = rs.rand(2000).reshape(10, -1)
-    arr[0, 0] = np.nan
-    return np.where(arr > 0.1, arr, np.nan)
-
-
 @pytest.mark.parametrize(
     "func",
     [ffill, bfill],
 )
 @pytest.mark.parametrize("limit", [1, 3, None])
-def test_fill_pandas_comp(rand_array, limit, func):
+@pytest.mark.parametrize("shape", [(3, 500)], indirect=True)
+def test_fill_pandas_comp(func, array, limit):
     c = COMPARISONS[func]
-    array = rand_array[:3]
 
     result = c["numbagg"](array, limit=limit)()
     expected = c["pandas"](array, limit=limit)()
@@ -76,17 +69,66 @@ def test_fill_pandas_comp(rand_array, limit, func):
         nanvar,
     ],
 )
-def test_aggregation_pandas_comp(rand_array, func):
+@pytest.mark.parametrize("shape", [(2, 500)], indirect=True)
+def test_aggregation_comparison(func, array):
     c = COMPARISONS[func]
-    array = rand_array[:3]
+    kwargs: dict = {}
 
-    result = c["numbagg"](array)()
-    expected = c["pandas"](array)()
-    if c.get("bottleneck"):
-        expected_bottleneck = c["bottleneck"](array)()
-        assert_allclose(result, expected_bottleneck)
-
+    result = c["numbagg"](array, **kwargs)()
+    expected = c["pandas"](array, **kwargs)()
     assert_allclose(result, expected)
+
+    if c.get("bottleneck"):
+        expected = c["bottleneck"](array, **kwargs)()
+        assert_allclose(result, expected)
+
+    if c.get("numpy"):
+        expected = c["numpy"](array, **kwargs)()
+        assert_allclose(result, expected)
+
+
+@pytest.mark.parametrize("limit", [1, 3, None])
+@pytest.mark.parametrize(
+    "func",
+    [
+        ffill,
+        bfill,
+    ],
+)
+def test_fill_comparison(func, array, limit):
+    c = COMPARISONS[func]
+    kwargs = dict(limit=limit)
+
+    result = c["numbagg"](array, **kwargs)()
+    expected = c["pandas"](array, **kwargs)()
+    assert_allclose(result, expected)
+
+    if c.get("bottleneck"):
+        expected = c["bottleneck"](array, **kwargs)()
+        assert_allclose(result, expected)
+
+    if c.get("numpy"):
+        expected = c["numpy"](array, **kwargs)()
+        assert_allclose(result, expected)
+
+
+@pytest.mark.parametrize("quantiles", [0.5, [0.25, 0.75]])
+def test_quantile_comparison(array, quantiles):
+    c = COMPARISONS[nanquantile]
+    kwargs = dict(quantiles=quantiles)
+
+    result = c["numbagg"](array, **kwargs)()
+    assert_allclose(result, c["numbagg"](array, **kwargs)())
+    expected = c["pandas"](array, **kwargs)().values
+    assert_allclose(result, expected)
+
+    if c.get("bottleneck"):
+        expected = c["bottleneck"](array, **kwargs)()
+        assert_allclose(result, expected)
+
+    if c.get("numpy"):
+        expected = c["numpy"](array, **kwargs)()
+        assert_allclose(result, expected)
 
 
 def functions():
@@ -188,26 +230,20 @@ def test_nan_quantile(axis, quantiles, rs):
     arr = rs.rand(2000).reshape(10, 10, -1)
     arr = np.arange(60).reshape(3, 4, 5).astype(np.float64)
 
-    # quantiles = np.array([0.25, 0.75])
     result = nanquantile(arr, quantiles, axis=axis)
     expected = np.nanquantile(arr, quantiles, axis=axis)
 
     assert_array_almost_equal(result, expected)
 
 
-@pytest.mark.parametrize("limit", [1, 3, None])
-def test_ffill(rand_array, limit):
-    a = rand_array[0]
-    expected = pd.Series(a).ffill(limit=limit).values
-    result = ffill(a, limit=limit)
-
-    assert_allclose(result, expected)
+@pytest.mark.parametrize("quantiles", [-0.5, [0.25, -0.75], [1.5], [0.5, 1.5]])
+def test_nan_quantile_errors(quantiles):
+    array = np.random.rand(10, 10)
+    with pytest.raises(ValueError, match="quantiles must be in the range"):
+        nanquantile(array, quantiles)
 
 
-@pytest.mark.parametrize("limit", [1, 3, None])
-def test_bfill(rand_array, limit):
-    a = rand_array[0]
-    expected = pd.Series(a).bfill(limit=limit).values
-    result = bfill(a, limit=limit)
-
-    assert_allclose(result, expected)
+def test_wraps():
+    assert move_exp_nanmean.__name__ == "move_exp_nanmean"  # type: ignore
+    assert move_exp_nanmean.__repr__() == "numbagg.move_exp_nanmean"
+    assert "Exponentially" in move_exp_nanmean.__doc__  # type: ignore

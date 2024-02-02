@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import functools
 import logging
+import warnings
 from functools import cache, partial
 from typing import Callable
 
@@ -63,7 +64,9 @@ def pandas_ewm_setup(func, a, alpha=0.5):
 
 
 def two_array_setup(a):
-    a1, a2 = a, a**2 + 1
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        a1, a2 = a, a**2 + 1
     return a1, a2
 
 
@@ -128,10 +131,12 @@ def numbagg_group_setup(func, a, **kwargs):
     return partial(with_factorization, a, **kwargs)
 
 
-def pandas_group_setup(func_name, a):
+def pandas_group_setup(func_name, a, **kwargs):
     labels = generate_labels(a.shape[-1])
     df = _df_of_array(a)
-    return lambda: (df.groupby(labels).pipe(lambda x: getattr(x, func_name)()).T)
+    return lambda: (
+        df.groupby(labels).pipe(lambda x: getattr(x, func_name)(**kwargs)).T
+    )
 
 
 def pandas_nan_sum_of_squares_setup(a):
@@ -162,6 +167,7 @@ COMPARISONS: dict[Callable, dict[str, Callable]] = {
         numbagg=lambda a, axis=-1: partial(nansum, a, axis=axis),
         pandas=lambda a: lambda: _df_of_array(a).sum().T,
         bottleneck=lambda a, axis=-1: partial(bn.nansum, a, axis=axis),
+        numpy=lambda a, axis=-1: partial(np.nansum, a, axis=axis),
     ),
     nanargmax: dict(
         numbagg=lambda a, axis=-1: partial(nanargmax, a, axis=axis),
@@ -176,31 +182,38 @@ COMPARISONS: dict[Callable, dict[str, Callable]] = {
     nancount: dict(
         numbagg=lambda a, axis=-1: partial(nancount, a, axis=axis),
         pandas=lambda a: lambda: _df_of_array(a).count().T,
+        numpy=lambda a, axis=-1: lambda: a.shape[axis]
+        - np.count_nonzero(np.isnan(a), axis=axis),
     ),
     nanmax: dict(
         numbagg=lambda a, axis=-1: partial(nanmax, a, axis=axis),
         pandas=lambda a: lambda: _df_of_array(a).max().T,
         bottleneck=lambda a, axis=-1: partial(bn.nanmax, a, axis=axis),
+        numpy=lambda a, axis=-1: partial(np.nanmax, a, axis=axis),
     ),
     nanmean: dict(
         numbagg=lambda a, axis=-1: partial(nanmean, a, axis=axis),
         pandas=lambda a: lambda: _df_of_array(a).mean().T,
         bottleneck=lambda a, axis=-1: partial(bn.nanmean, a, axis=axis),
+        numpy=lambda a, axis=-1: partial(np.nanmean, a, axis=axis),
     ),
     nanmin: dict(
         numbagg=lambda a, axis=-1: partial(nanmin, a, axis=axis),
         pandas=lambda a: lambda: _df_of_array(a).min().T,
         bottleneck=lambda a, axis=-1: partial(bn.nanmin, a, axis=axis),
+        numpy=lambda a, axis=-1: partial(np.nanmin, a, axis=axis),
     ),
     nanstd: dict(
         numbagg=lambda a, axis=-1: partial(nanstd, a, axis=axis),
         pandas=lambda a: lambda: _df_of_array(a).std().T,
         bottleneck=lambda a, axis=-1: partial(bn.nanstd, a, axis=axis, ddof=1),
+        numpy=lambda a, axis=-1: partial(np.nanstd, a, ddof=1, axis=axis),
     ),
     nanvar: dict(
         numbagg=lambda a, axis=-1: partial(nanvar, a, axis=axis),
         pandas=lambda a: lambda: _df_of_array(a).var().T,
         bottleneck=lambda a, axis=-1: partial(bn.nanvar, a, axis=axis, ddof=1),
+        numpy=lambda a, axis=-1: partial(np.nanvar, a, ddof=1, axis=axis),
     ),
     anynan: dict(
         numbagg=lambda a, axis=-1: partial(anynan, a, axis=axis),
@@ -214,23 +227,33 @@ COMPARISONS: dict[Callable, dict[str, Callable]] = {
     ),
     move_exp_nanvar: dict(
         pandas=lambda a, alpha=0.5: pandas_ewm_setup(lambda df: df.var().T, a, alpha),
-        numbagg=lambda a, alpha=0.5: partial(move_exp_nanvar, a, alpha=alpha),
+        numbagg=lambda a, alpha=0.5, **kwargs: partial(
+            move_exp_nanvar, a, alpha=alpha, **kwargs
+        ),
     ),
     move_exp_nanmean: dict(
         pandas=lambda a, alpha=0.5: pandas_ewm_setup(lambda df: df.mean().T, a, alpha),
-        numbagg=lambda a, alpha=0.5: partial(move_exp_nanmean, a, alpha=alpha),
+        numbagg=lambda a, alpha=0.5, **kwargs: partial(
+            move_exp_nanmean, a, alpha=alpha, **kwargs
+        ),
     ),
     move_exp_nancount: dict(
         pandas=pandas_ewm_nancount_setup,
-        numbagg=lambda a, alpha=0.5: partial(move_exp_nancount, a, alpha=alpha),
+        numbagg=lambda a, alpha=0.5, **kwargs: partial(
+            move_exp_nancount, a, alpha=alpha, **kwargs
+        ),
     ),
     move_exp_nanstd: dict(
         pandas=lambda a, alpha=0.5: pandas_ewm_setup(lambda df: df.std().T, a, alpha),
-        numbagg=lambda a, alpha=0.5: partial(move_exp_nanstd, a, alpha=alpha),
+        numbagg=lambda a, alpha=0.5, **kwargs: partial(
+            move_exp_nanstd, a, alpha=alpha, **kwargs
+        ),
     ),
     move_exp_nansum: dict(
         pandas=lambda a, alpha=0.5: pandas_ewm_setup(lambda df: df.sum().T, a, alpha),
-        numbagg=lambda a, alpha=0.5: partial(move_exp_nansum, a, alpha=alpha),
+        numbagg=lambda a, alpha=0.5, **kwargs: partial(
+            move_exp_nansum, a, alpha=alpha, **kwargs
+        ),
     ),
     move_exp_nancorr: dict(
         pandas=lambda a, alpha=0.5: pandas_ewm_2_array_setup(
@@ -321,11 +344,15 @@ COMPARISONS: dict[Callable, dict[str, Callable]] = {
         ],
     ),
     nanquantile: dict(
-        pandas=lambda a, quantiles=[0.25, 0.75]: lambda: _df_of_array(a)
-        .quantile(quantiles)
-        .T,
-        numbagg=lambda a, quantiles=[0.25, 0.75]: partial(nanquantile, a, quantiles),
-        numpy=lambda a, quantiles=[0.25, 0.75]: partial(np.nanquantile, a, quantiles),
+        pandas=lambda a, quantiles=[0.25, 0.75]: lambda: _df_of_array(a).quantile(
+            quantiles
+        ),
+        numbagg=lambda a, quantiles=[0.25, 0.75], axis=-1: partial(
+            nanquantile, a, quantiles, axis=axis
+        ),
+        numpy=lambda a, quantiles=[0.25, 0.75], axis=-1: partial(
+            np.nanquantile, a, quantiles, axis=axis
+        ),
     ),
     group_nanmean: dict(
         pandas=partial(pandas_group_setup, "mean"),
@@ -386,7 +413,7 @@ COMPARISONS: dict[Callable, dict[str, Callable]] = {
     group_nansum_of_squares: dict(
         pandas=pandas_nan_sum_of_squares_setup,
         numbagg=partial(numbagg_group_setup, group_nansum_of_squares),
-    )
+    ),
     # move_count: dict(
     #     pandas=dict(
     #         setup=pandas_move_setup,
@@ -405,7 +432,7 @@ def library(request):
     """By default, limits to numbagg. But can be extended to pandas and bottleneck
 
     ```
-    @pytest.mark.parametrize("library", ["numbagg", "pandas", "bottleneck"], indirect=True)
+    @pytest.mark.parametrize("library", ["numbagg", "pandas", "bottleneck", "numpy"], indirect=True)
         def test_func():
             # ...
     ```
@@ -460,8 +487,8 @@ def func_callable(library, func, array):
         assert callable(callable_)
         return callable_
     except KeyError:
-        if library == "bottleneck":
-            pytest.skip(f"Bottleneck doesn't support {func}")
+        if library in ["bottleneck", "numpy"]:
+            pytest.skip(f"{library} doesn't support {func}")
         else:
             raise
 
@@ -471,7 +498,7 @@ def numba_logger():
     # This is exteremly noisy, so we turn it off. We can make this a setting if it would
     # be occasionally useful.
     numba_logger = logging.getLogger("numba")
-    numba_logger.setLevel(logging.WARNING)
+    numba_logger.setLevel(logging.INFO)
 
 
 @pytest.fixture(scope="module")
