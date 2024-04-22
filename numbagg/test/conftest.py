@@ -50,6 +50,7 @@ from .. import (
     nancount,
     nanmax,
     nanmean,
+    nanmedian,
     nanmin,
     nanquantile,
     nanstd,
@@ -343,6 +344,11 @@ COMPARISONS: dict[Callable, dict[str, Callable]] = {
             ..., ::-1
         ],
     ),
+    nanmedian: dict(
+        pandas=lambda a,: lambda: _df_of_array(a).median(),
+        numbagg=lambda a, axis=-1: partial(nanmedian, a, axis=axis),
+        numpy=lambda a, axis=-1: partial(np.nanmedian, a, axis=axis),
+    ),
     nanquantile: dict(
         pandas=lambda a, quantiles=[0.25, 0.75]: lambda: _df_of_array(a).quantile(
             quantiles
@@ -495,7 +501,7 @@ def func_callable(library, func, array):
 
 @pytest.fixture(autouse=True)
 def numba_logger():
-    # This is exteremly noisy, so we turn it off. We can make this a setting if it would
+    # This is extremely noisy, so we turn it off. We can make this a setting if it would
     # be occasionally useful.
     numba_logger = logging.getLogger("numba")
     numba_logger.setLevel(logging.INFO)

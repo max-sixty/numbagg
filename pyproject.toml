@@ -34,7 +34,8 @@ homepage = "https://github.com/numbagg/numbagg"
 dev = [
   "bottleneck",
   "hypothesis",
-  "jq",
+  "jq; platform_system!='Windows'", # jq doesn't easily install on Windows. Alternatively we could have a `benchmark` category
+  "mypy",
   "pandas",
   "pre-commit",
   "pytest-benchmark",
@@ -50,6 +51,9 @@ fallback_version = "999"
 [tool.ruff]
 builtins = ["ellipsis"]
 target-version = "py39"
+
+[tool.ruff.lint]
+
 # E402: module level import not at top of file
 # E501: line too long - let black worry about that
 # E731: do not assign a lambda expression, use a def
