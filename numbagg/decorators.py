@@ -315,7 +315,7 @@ class ndmoveexp(NumbaBaseSimple):
     ):
         if not isinstance(alpha, np.ndarray):
             alpha = np.broadcast_to(alpha, arr[0].shape[axis])  # type: ignore[assignment,unused-ignore]
-            aLpha_axis = -1
+            alpha_axis = -1
         elif alpha.ndim == 1:
             alpha_axis = -1
         else:
@@ -365,7 +365,9 @@ class ndmoveexpmat(ndmoveexp):
         supports_parallel: bool = True,
     ):
         self.gufunc_signature = gufunc_signature
-        super().__init__(func=func, signature=signature, supports_parallel=supports_parallel)
+        super().__init__(
+            func=func, signature=signature, supports_parallel=supports_parallel
+        )
 
     def __call__(
         self,
@@ -396,7 +398,7 @@ class ndmoveexpmat(ndmoveexp):
                 )
             (axis,) = axis
 
-        axes = [(-2, -1), (-1,), (), (-3,-2,-1)]
+        axes = [(-2, -1), (-1,), (), (-3, -2, -1)]
 
         # Axes is `axis` for each array (most often just one array), and then either
         # `-1` or `axis` for alphas, depending on whether a full array was passed or not.
@@ -422,7 +424,7 @@ class ndmoveexpmat(ndmoveexp):
 
         vectorize = numba.guvectorize(
             self.signature,
-                    self.gufunc_signature ,
+            self.gufunc_signature,
             nopython=True,
             target=target,
             cache=self.cache,

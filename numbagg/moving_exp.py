@@ -270,10 +270,10 @@ def move_exp_nancov(a1, a2, alpha, min_weight, out):
 
 @ndmoveexpmat.wrap(
     signature=[
-        (float32[:,:], float32[:], float32, float32[:,:,:]),
-        (float64[:,:], float64[:], float64, float64[:,:,:]),
+        (float32[:, :], float32[:], float32, float32[:, :, :]),
+        (float64[:, :], float64[:], float64, float64[:, :, :]),
     ],
-    gufunc_signature="(k,n),(n),()->(k,k,n)"
+    gufunc_signature="(k,n),(n),()->(n,k,k)",
 )
 def move_exp_nancorrmat(arr, alpha, min_weight, out):
     """
@@ -290,13 +290,13 @@ def move_exp_nancorrmat(arr, alpha, min_weight, out):
     out : array
         Output array for correlation matrix values (n,k,k)
     """
-    K, N = arr.shape
-    
+    N = arr.shape[1]  # number of time points (axis 1)
+    K = arr.shape[0]  # number of variables (axis 0)
     # Arrays to store sums for each column
     sums = np.zeros(K)
     sum_sqs = np.zeros(K)
     sum_weight = sum_weight_2 = weight = 0.0
-    
+
     # Array to store cross products between columns
     sum_prods = np.zeros((K, K))
 
@@ -325,9 +325,9 @@ def move_exp_nancorrmat(arr, alpha, min_weight, out):
                 val_k = arr[k, i]
                 sums[k] += val_k
                 sum_sqs[k] += val_k * val_k
-                
+
                 # Update cross products
-                for j in range(k+1, K):
+                for j in range(k + 1, K):
                     val_j = arr[j, i]
                     prod = val_k * val_j
                     sum_prods[k, j] += prod
@@ -345,13 +345,13 @@ def move_exp_nancorrmat(arr, alpha, min_weight, out):
             for k in range(K):
                 # Diagonal elements are always 1
                 out[i, k, k] = 1.0
-                
-                var_k = sum_sqs[k] - (sums[k]**2 / sum_weight)
-                
-                for j in range(k+1, K):
-                    var_j = sum_sqs[j] - (sums[j]**2 / sum_weight)
+
+                var_k = sum_sqs[k] - (sums[k] ** 2 / sum_weight)
+
+                for j in range(k + 1, K):
+                    var_j = sum_sqs[j] - (sums[j] ** 2 / sum_weight)
                     cov = sum_prods[k, j] - (sums[k] * sums[j] / sum_weight)
-                    
+
                     denominator = np.sqrt(var_k * var_j)
                     if denominator > 0:
                         corr = cov / denominator

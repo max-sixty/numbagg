@@ -12,9 +12,7 @@ from numbagg import (
     move_exp_nansum,
     move_exp_nanvar,
 )
-
 from numbagg.moving_exp import move_exp_nancorrmat
-
 
 from .conftest import COMPARISONS
 
@@ -334,12 +332,13 @@ def test_move_exp_nancorrmat_basic(rs):
 
     # Check symmetry
     for i in range(k):
-        for j in range(i+1, k):
+        for j in range(i + 1, k):
             assert_allclose(out[:, i, j], out[:, j, i])
 
     # Compare with move_exp_nancorr for one pair
-    out = move_exp_nancorr(arr[:, 0], arr[:, 1], alpha=alpha)
-    assert_allclose(out[:, 0, 1], out)
+    corr_mat = move_exp_nancorrmat(arr, alpha=alpha, min_weight=0.0)
+    corr_pair = move_exp_nancorr(arr[:, 0], arr[:, 1], alpha=alpha)
+    assert_allclose(corr_mat[:, 0, 1], corr_pair)
 
 
 def test_move_exp_nancorrmat_nan_handling(rs):
