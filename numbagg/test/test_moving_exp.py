@@ -13,6 +13,9 @@ from numbagg import (
     move_exp_nanvar,
 )
 
+from numbagg.moving_exp import move_exp_nancorrmat
+
+
 from .conftest import COMPARISONS
 
 
@@ -314,6 +317,51 @@ def test_move_exp_nancorr_numeric():
     result = move_exp_nancorr(array1, array2, alpha=0.25)
     expected = np.array([np.nan, 1.0, 0.85, 0.4789468])
     assert_allclose(result, expected)
+
+
+def test_move_exp_nancorrmat_basic(rs):
+    n = 100
+    k = 3  # Test with 3 variables
+    arr = rs.randn(n, k).astype(np.float64)
+    alpha = 0.1
+
+    out = move_exp_nancorrmat(arr, alpha=alpha, min_weight=0.0)
+
+    # Check diagonal is 1 where we have valid values
+    valid_idx = ~np.isnan(out[:, 0, 0])
+    for i in range(k):
+        assert_allclose(out[valid_idx, i, i], 1.0)
+
+    # Check symmetry
+    for i in range(k):
+        for j in range(i+1, k):
+            assert_allclose(out[:, i, j], out[:, j, i])
+
+    # Compare with move_exp_nancorr for one pair
+    out = move_exp_nancorr(arr[:, 0], arr[:, 1], alpha=alpha)
+    assert_allclose(out[:, 0, 1], out)
+
+
+def test_move_exp_nancorrmat_nan_handling(rs):
+    n = 100
+    k = 3
+    arr = rs.randn(n, k).astype(np.float64)
+
+    # Insert some NaNs in different columns
+    arr[10:20, 0] = np.nan
+    arr[15:25, 1] = np.nan
+    arr[20:30, 2] = np.nan
+
+    alpha = 0.1
+    min_weight = 0.1
+    out = np.full((n, k, k), np.nan)
+
+    move_exp_nancorrmat(arr, alpha=alpha, min_weight=min_weight, out=out)
+
+    # Check that we have NaNs where expected
+    # Any row where any column has NaN should result in NaN correlations
+    nan_rows = np.any(np.isnan(arr), axis=1)
+    assert np.all(np.isnan(out[nan_rows]))
 
 
 @pytest.mark.parametrize(

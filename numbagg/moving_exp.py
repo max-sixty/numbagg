@@ -1,7 +1,7 @@
 import numpy as np
 from numba import float32, float64
 
-from .decorators import ndmoveexp
+from .decorators import ndmoveexp, ndmoveexpmat
 
 
 @ndmoveexp.wrap(
@@ -264,6 +264,100 @@ def move_exp_nancov(a1, a2, alpha, min_weight, out):
 
         if weight >= min_weight and bias > 0:
             out[i] = cov_biased / bias
+        else:
+            out[i] = np.nan
+
+
+@ndmoveexpmat.wrap(
+    signature=[
+        (float32[:,:], float32[:], float32, float32[:,:,:]),
+        (float64[:,:], float64[:], float64, float64[:,:,:]),
+    ],
+    gufunc_signature="(k,n),(n),()->(k,k,n)"
+)
+def move_exp_nancorrmat(arr, alpha, min_weight, out):
+    """
+    Calculates the exponentially decayed correlation matrix between columns of input array.
+
+    Parameters
+    ----------
+    arr : array
+        Input array of shape (n,k) where n is time and k is number of variables
+    alpha : array
+        Alpha values for exponential weighting
+    min_weight : float
+        Minimum weight required to compute correlation
+    out : array
+        Output array for correlation matrix values (n,k,k)
+    """
+    K, N = arr.shape
+    
+    # Arrays to store sums for each column
+    sums = np.zeros(K)
+    sum_sqs = np.zeros(K)
+    sum_weight = sum_weight_2 = weight = 0.0
+    
+    # Array to store cross products between columns
+    sum_prods = np.zeros((K, K))
+
+    for i in range(N):
+        alpha_i = alpha[i]
+        decay = 1.0 - alpha_i
+
+        # Decay all sums
+        sums *= decay
+        sum_sqs *= decay
+        sum_prods *= decay
+        sum_weight *= decay
+        sum_weight_2 *= decay**2
+        weight *= decay
+
+        # Check if any value in this row is NaN
+        row_valid = True
+        for k in range(K):
+            if np.isnan(arr[k, i]):
+                row_valid = False
+                break
+
+        if row_valid:
+            # Update sums for each column
+            for k in range(K):
+                val_k = arr[k, i]
+                sums[k] += val_k
+                sum_sqs[k] += val_k * val_k
+                
+                # Update cross products
+                for j in range(k+1, K):
+                    val_j = arr[j, i]
+                    prod = val_k * val_j
+                    sum_prods[k, j] += prod
+                    sum_prods[j, k] += prod
+
+            sum_weight += 1
+            sum_weight_2 += 1
+            weight += alpha_i
+
+        # The bias cancels out in correlation, but we keep the check for consistency
+        bias = 1 - sum_weight_2 / (sum_weight**2)
+
+        if weight >= min_weight and bias > 0:
+            # Compute correlations for all pairs
+            for k in range(K):
+                # Diagonal elements are always 1
+                out[i, k, k] = 1.0
+                
+                var_k = sum_sqs[k] - (sums[k]**2 / sum_weight)
+                
+                for j in range(k+1, K):
+                    var_j = sum_sqs[j] - (sums[j]**2 / sum_weight)
+                    cov = sum_prods[k, j] - (sums[k] * sums[j] / sum_weight)
+                    
+                    denominator = np.sqrt(var_k * var_j)
+                    if denominator > 0:
+                        corr = cov / denominator
+                        out[i, k, j] = out[i, j, k] = corr
+                    else:
+                        out[i, k, j] = out[i, j, k] = np.nan
         else:
             out[i] = np.nan
 

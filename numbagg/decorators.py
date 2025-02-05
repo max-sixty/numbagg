@@ -124,6 +124,7 @@ class NumbaBase:
     @cache
     def gufunc(self, *, target):
         gufunc_sig = gufunc_string_signature(self.signature[0])
+        logger.warning(gufunc_sig)
         vectorize = numba.guvectorize(
             self.signature,
             gufunc_sig,
@@ -291,7 +292,6 @@ class ndmoveexp(NumbaBaseSimple):
     decays the whole value such that `moving_exp_sum` returns the input. A value of 1
     doesn't decay at all, such that `moving_exp_sum` is equivalent to an accumulating
     sum. The function doesn't proactively check for valid values.
-
     """
 
     def __init__(
@@ -315,7 +315,7 @@ class ndmoveexp(NumbaBaseSimple):
     ):
         if not isinstance(alpha, np.ndarray):
             alpha = np.broadcast_to(alpha, arr[0].shape[axis])  # type: ignore[assignment,unused-ignore]
-            alpha_axis = -1
+            aLpha_axis = -1
         elif alpha.ndim == 1:
             alpha_axis = -1
         else:
@@ -341,11 +341,94 @@ class ndmoveexp(NumbaBaseSimple):
         # `-1` or `axis` for alphas, depending on whether a full array was passed or not.
         # Then `()` for the min_weight, and `axis` for the output
         axes = [axis for _ in range(len(arr))] + [alpha_axis, (), axis]
+
         # For the sake of speed, we ignore divide-by-zero and NaN warnings, and test for
         # their correct handling in our tests.
         with np.errstate(invalid="ignore", divide="ignore"):
             gufunc = self.gufunc(target=self.target)
             return gufunc(*arr, alpha, min_weight, axes=axes, **kwargs)
+
+
+class ndmoveexpmat(ndmoveexp):
+    """
+    Exponential moving window function for matrix outputs.
+
+    Similar to ndmoveexp, but handles functions that output a matrix at each point
+    rather than a scalar value.
+    """
+
+    def __init__(
+        self,
+        func: Callable,
+        signature: list[tuple],
+        gufunc_signature: str,
+        supports_parallel: bool = True,
+    ):
+        self.gufunc_signature = gufunc_signature
+        super().__init__(func=func, signature=signature, supports_parallel=supports_parallel)
+
+    def __call__(
+        self,
+        *arr: np.ndarray,
+        alpha: float,
+        min_weight: float = 0,
+        axis: int = -1,
+        **kwargs,
+    ):
+        if not isinstance(alpha, np.ndarray):
+            alpha = np.broadcast_to(alpha, arr[-1].shape[axis])  # type: ignore[assignment,unused-ignore]
+            alpha_axis = -1
+        elif alpha.ndim == 1:
+            alpha_axis = -1
+        else:
+            alpha_axis = axis
+
+        if isinstance(axis, tuple):
+            if axis == ():
+                if len(arr) > 1:
+                    raise ValueError(
+                        "`axis` cannot be an empty tuple when passing more than one array; since we default to returning the input."
+                    )
+                return arr[0]
+            if len(axis) > 1:
+                raise ValueError(
+                    f"Only one axis can be passed to {self.func}; got {axis}"
+                )
+            (axis,) = axis
+
+        axes = [(-2, -1), (-1,), (), (-3,-2,-1)]
+
+        # Axes is `axis` for each array (most often just one array), and then either
+        # `-1` or `axis` for alphas, depending on whether a full array was passed or not.
+        # Then `()` for the min_weight, and `axis` for the output
+        # axes = [axis for _ in range(len(arr))] + [alpha_axis, (), axis]
+
+        # For the sake of speed, we ignore divide-by-zero and NaN warnings, and test for
+        # their correct handling in our tests.
+        with np.errstate(invalid="ignore", divide="ignore"):
+            gufunc = self.gufunc(target=self.target)
+            return gufunc(*arr, alpha, min_weight, axes=axes, **kwargs)
+
+    @cache
+    def gufunc(self, *, target):
+        # For matrix outputs, we need a custom signature that indicates the additional dimensions
+        # The signature will look like "(n),(n),(n),()->(n,m,m)" where m is the matrix size
+        first_sig = self.signature[0]
+        input_dims = _gufunc_arg_str(first_sig[0])
+        # For matrix outputs, if input is (n,k), output should be (n,k,k)
+        # This creates a signature like "(n,k),(n,k),(n),()->(n,k,k)"
+
+        logger.warning(f"Compiling gufunc with signature: {self.gufunc_signature}")
+
+        vectorize = numba.guvectorize(
+            self.signature,
+                    self.gufunc_signature ,
+            nopython=True,
+            target=target,
+            cache=self.cache,
+            fastmath=_FASTMATH,
+        )
+        return vectorize(self.func)
 
 
 class ndfill(NumbaBaseSimple):
