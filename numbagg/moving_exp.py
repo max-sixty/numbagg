@@ -298,8 +298,10 @@ def move_exp_nancorrmat(arr, alpha, min_weight, out):
     # Array to store cross products between columns
     sum_prods = np.zeros((K, K))
 
-    # Common weight tracking for all pairs
-    sum_weight = sum_weight_2 = weight = 0.0
+    # Track weights per pair
+    weights = np.zeros((K, K))
+    sum_weights = np.zeros((K, K))
+    sum_weights_2 = np.zeros((K, K))
 
     for i in range(N):
         alpha_i = alpha[i]
@@ -309,9 +311,9 @@ def move_exp_nancorrmat(arr, alpha, min_weight, out):
         sums *= decay
         sum_sqs *= decay
         sum_prods *= decay
-        sum_weight *= decay
-        sum_weight_2 *= decay**2
-        weight *= decay
+        weights *= decay
+        sum_weights *= decay
+        sum_weights_2 *= decay**2
 
         # Update sums and cross products for valid pairs
         for k in range(K):
@@ -326,32 +328,29 @@ def move_exp_nancorrmat(arr, alpha, min_weight, out):
                         prod = val_k * val_j
                         sum_prods[k, j] += prod
                         sum_prods[j, k] += prod
-
-        # Update weight for this timestep
-        sum_weight += 1
-        sum_weight_2 += 1
-        weight += alpha_i
+                        # Update weights only for valid pairs
+                        weights[k, j] += alpha_i
+                        weights[j, k] += alpha_i
+                        sum_weights[k, j] += 1
+                        sum_weights[j, k] += 1
+                        sum_weights_2[k, j] += 1
+                        sum_weights_2[j, k] += 1
 
         # Compute correlations for each pair
         for k in range(K):
             for j in range(k, K):  # Include diagonal
-                # Skip if either column has NaN at this timestep
-                if np.isnan(arr[k, i]) or np.isnan(arr[j, i]):
-                    out[i, k, j] = out[i, j, k] = np.nan
-                    continue
+                # The bias cancels out in correlation, but we keep the check for consistency
+                bias = 1 - sum_weights_2[k, j] / (sum_weights[k, j]**2)
 
-                # For diagonal elements (same variable)
-                if k == j:
-                    out[i, k, k] = 1.0
-                else:
-                    # The bias cancels out in correlation, but we keep the check for consistency
-                    bias = 1 - sum_weight_2 / (sum_weight**2)
-
-                    if weight >= min_weight and bias > 0:
+                if weights[k, j] >= min_weight and bias > 0:
+                    # For diagonal elements, correlation is always 1.0
+                    if k == j:
+                        out[i, k, k] = 1.0
+                    else:
                         # Compute variances and covariance
-                        var_k = sum_sqs[k] - (sums[k] ** 2 / sum_weight)
-                        var_j = sum_sqs[j] - (sums[j] ** 2 / sum_weight)
-                        cov = sum_prods[k, j] - (sums[k] * sums[j] / sum_weight)
+                        var_k = sum_sqs[k] - (sums[k] ** 2 / sum_weights[k, j])
+                        var_j = sum_sqs[j] - (sums[j] ** 2 / sum_weights[k, j])
+                        cov = sum_prods[k, j] - (sums[k] * sums[j] / sum_weights[k, j])
 
                         # Compute correlation if possible
                         denominator = np.sqrt(var_k * var_j)
@@ -360,8 +359,8 @@ def move_exp_nancorrmat(arr, alpha, min_weight, out):
                             out[i, k, j] = out[i, j, k] = corr
                         else:
                             out[i, k, j] = out[i, j, k] = np.nan
-                    else:
-                        out[i, k, j] = out[i, j, k] = np.nan
+                else:
+                    out[i, k, j] = out[i, j, k] = np.nan
 
 
 @ndmoveexp.wrap(
