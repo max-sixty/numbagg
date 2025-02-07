@@ -328,7 +328,12 @@ def move_exp_nancorrmat(arr, alpha, min_weight, out):
                         prod = val_k * val_j
                         sum_prods[k, j] += prod
                         sum_prods[j, k] += prod
-                        # Update weights only for valid pairs
+
+        # Update weights for valid pairs at this timestep
+        for k in range(K):
+            if not np.isnan(arr[k, i]):
+                for j in range(k, K):
+                    if not np.isnan(arr[j, i]):
                         weights[k, j] += alpha_i
                         weights[j, k] += alpha_i
                         sum_weights[k, j] += 1
@@ -339,6 +344,11 @@ def move_exp_nancorrmat(arr, alpha, min_weight, out):
         # Compute correlations for each pair
         for k in range(K):
             for j in range(k, K):  # Include diagonal
+                # Skip if either value is NaN at this timestep
+                if np.isnan(arr[k, i]) or np.isnan(arr[j, i]):
+                    out[i, k, j] = out[i, j, k] = np.nan
+                    continue
+
                 # The bias cancels out in correlation, but we keep the check for consistency
                 bias = 1 - sum_weights_2[k, j] / (sum_weights[k, j]**2)
 
