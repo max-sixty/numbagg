@@ -292,19 +292,20 @@ def move_exp_nancorrmat(arr, alpha, min_weight, out):
     """
     N = arr.shape[1]  # number of time points (axis 1)
     K = arr.shape[0]  # number of variables (axis 0)
-    # Arrays to store sums for each column
+    # Arrays to store sums and squared sums for each column
     sums = np.zeros(K)
     sum_sqs = np.zeros(K)
-    sum_weight = sum_weight_2 = weight = 0.0
-
     # Array to store cross products between columns
     sum_prods = np.zeros((K, K))
+
+    # Common weight tracking for all pairs
+    sum_weight = sum_weight_2 = weight = 0.0
 
     for i in range(N):
         alpha_i = alpha[i]
         decay = 1.0 - alpha_i
 
-        # Decay all sums
+        # Decay all values
         sums *= decay
         sum_sqs *= decay
         sum_prods *= decay
@@ -312,54 +313,55 @@ def move_exp_nancorrmat(arr, alpha, min_weight, out):
         sum_weight_2 *= decay**2
         weight *= decay
 
-        # Check if any value in this row is NaN
-        row_valid = True
+        # Update sums and cross products for valid pairs
         for k in range(K):
-            if np.isnan(arr[k, i]):
-                row_valid = False
-                break
-
-        if row_valid:
-            # Update sums for each column
-            for k in range(K):
-                val_k = arr[k, i]
+            val_k = arr[k, i]
+            if not np.isnan(val_k):
                 sums[k] += val_k
                 sum_sqs[k] += val_k * val_k
 
-                # Update cross products
                 for j in range(k + 1, K):
                     val_j = arr[j, i]
-                    prod = val_k * val_j
-                    sum_prods[k, j] += prod
-                    sum_prods[j, k] += prod
+                    if not np.isnan(val_j):
+                        prod = val_k * val_j
+                        sum_prods[k, j] += prod
+                        sum_prods[j, k] += prod
 
-            sum_weight += 1
-            sum_weight_2 += 1
-            weight += alpha_i
+        # Update weight for this timestep
+        sum_weight += 1
+        sum_weight_2 += 1
+        weight += alpha_i
 
-        # The bias cancels out in correlation, but we keep the check for consistency
-        bias = 1 - sum_weight_2 / (sum_weight**2)
+        # Compute correlations for each pair
+        for k in range(K):
+            for j in range(k, K):  # Include diagonal
+                # Skip if either column has NaN at this timestep
+                if np.isnan(arr[k, i]) or np.isnan(arr[j, i]):
+                    out[i, k, j] = out[i, j, k] = np.nan
+                    continue
 
-        if weight >= min_weight and bias > 0:
-            # Compute correlations for all pairs
-            for k in range(K):
-                # Diagonal elements are always 1
-                out[i, k, k] = 1.0
+                # For diagonal elements (same variable)
+                if k == j:
+                    out[i, k, k] = 1.0
+                else:
+                    # The bias cancels out in correlation, but we keep the check for consistency
+                    bias = 1 - sum_weight_2 / (sum_weight**2)
 
-                var_k = sum_sqs[k] - (sums[k] ** 2 / sum_weight)
+                    if weight >= min_weight and bias > 0:
+                        # Compute variances and covariance
+                        var_k = sum_sqs[k] - (sums[k] ** 2 / sum_weight)
+                        var_j = sum_sqs[j] - (sums[j] ** 2 / sum_weight)
+                        cov = sum_prods[k, j] - (sums[k] * sums[j] / sum_weight)
 
-                for j in range(k + 1, K):
-                    var_j = sum_sqs[j] - (sums[j] ** 2 / sum_weight)
-                    cov = sum_prods[k, j] - (sums[k] * sums[j] / sum_weight)
-
-                    denominator = np.sqrt(var_k * var_j)
-                    if denominator > 0:
-                        corr = cov / denominator
-                        out[i, k, j] = out[i, j, k] = corr
+                        # Compute correlation if possible
+                        denominator = np.sqrt(var_k * var_j)
+                        if denominator > 0:
+                            corr = cov / denominator
+                            out[i, k, j] = out[i, j, k] = corr
+                        else:
+                            out[i, k, j] = out[i, j, k] = np.nan
                     else:
                         out[i, k, j] = out[i, j, k] = np.nan
-        else:
-            out[i] = np.nan
 
 
 @ndmoveexp.wrap(

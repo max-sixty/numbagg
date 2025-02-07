@@ -336,7 +336,7 @@ def test_move_exp_nancorrmat_basic(rs):
             assert_allclose(out[:, i, j], out[:, j, i])
 
     # Compare with move_exp_nancorr for one pair
-    corr_mat = move_exp_nancorrmat(arr, alpha=alpha, min_weight=0.0)
+    corr_mat = move_exp_nancorrmat(arr.T, alpha=alpha, min_weight=0.0)
     corr_pair = move_exp_nancorr(arr[:, 0], arr[:, 1], alpha=alpha)
     assert_allclose(corr_mat[:, 0, 1], corr_pair)
 
@@ -355,12 +355,18 @@ def test_move_exp_nancorrmat_nan_handling(rs):
     min_weight = 0.1
     out = np.full((n, k, k), np.nan)
 
-    move_exp_nancorrmat(arr, alpha=alpha, min_weight=min_weight, out=out)
+    move_exp_nancorrmat(arr.T, alpha=alpha, min_weight=min_weight, out=out)
 
-    # Check that we have NaNs where expected
-    # Any row where any column has NaN should result in NaN correlations
-    nan_rows = np.any(np.isnan(arr), axis=1)
-    assert np.all(np.isnan(out[nan_rows]))
+    # Check that NaN values only affect correlations involving that variable
+    # For time points with NaN in first column, check that correlation between
+    # second and third columns is still computed
+    nan_period = slice(10, 20)
+    corr_23 = out[nan_period, 1, 2]
+    assert not np.all(np.isnan(corr_23))
+
+    # But correlations involving the NaN column should be NaN
+    assert np.all(np.isnan(out[nan_period, 0, 1]))
+    assert np.all(np.isnan(out[nan_period, 0, 2]))
 
 
 @pytest.mark.parametrize(
