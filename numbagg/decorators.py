@@ -371,7 +371,7 @@ class ndmoveexpmat(ndmoveexp):
     def __call__(
         self,
         *arr: np.ndarray,
-        alpha: float,
+        alpha: float | np.ndarray,
         min_weight: float = 0,
         axis: int = -1,
         **kwargs,
@@ -397,6 +397,11 @@ class ndmoveexpmat(ndmoveexp):
                 )
             (axis,) = axis
 
+        # For matrix operations with shape (t,k), we need:
+        # - input array: (t,k)
+        # - alpha: (t,)
+        # - min_weight: scalar
+        # - output: (t,k,k)
         axes = [(-2, -1), (-1,), (), (-3, -2, -1)]
 
         # Axes is `axis` for each array (most often just one array), and then either
@@ -414,8 +419,6 @@ class ndmoveexpmat(ndmoveexp):
     def gufunc(self, *, target):
         # For matrix outputs, we need a custom signature that indicates the additional dimensions
         # The signature will look like "(n),(n),(n),()->(n,m,m)" where m is the matrix size
-        first_sig = self.signature[0]
-        input_dims = _gufunc_arg_str(first_sig[0])
         # For matrix outputs, if input is (n,k), output should be (n,k,k)
         # This creates a signature like "(n,k),(n,k),(n),()->(n,k,k)"
 

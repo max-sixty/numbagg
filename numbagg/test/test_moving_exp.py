@@ -336,7 +336,7 @@ def test_move_exp_nancorrmat_basic(rs):
             assert_allclose(out[:, i, j], out[:, j, i])
 
     # Compare with move_exp_nancorr for one pair
-    corr_mat = move_exp_nancorrmat(arr.T, alpha=alpha, min_weight=0.0)
+    corr_mat = move_exp_nancorrmat(arr, alpha=alpha, min_weight=0.0)
     corr_pair = move_exp_nancorr(arr[:, 0], arr[:, 1], alpha=alpha)
     assert_allclose(corr_mat[:, 0, 1], corr_pair)
 
@@ -355,7 +355,7 @@ def test_move_exp_nancorrmat_nan_handling(rs):
     min_weight = 0.1
     out = np.full((n, k, k), np.nan)
 
-    move_exp_nancorrmat(arr.T, alpha=alpha, min_weight=min_weight, out=out)
+    move_exp_nancorrmat(arr, alpha=alpha, min_weight=min_weight, out=out)
 
     # Check that NaN values only affect correlations involving that variable
     # For time points with NaN in first column, check that correlation between
@@ -367,6 +367,62 @@ def test_move_exp_nancorrmat_nan_handling(rs):
     # But correlations involving the NaN column should be NaN
     assert np.all(np.isnan(out[nan_period, 0, 1]))
     assert np.all(np.isnan(out[nan_period, 0, 2]))
+
+
+def test_move_exp_nancorrmat_numeric(rs):
+    # Test with known values
+    arr = np.array([
+        [1.0, 2.0, 3.0],  # perfectly correlated
+        [2.0, 4.0, 6.0],
+        [3.0, 6.0, 9.0],
+    ]).T  # transpose to get (n,k) shape
+    alpha = 0.5
+    out = move_exp_nancorrmat(arr, alpha=alpha, min_weight=0.0)
+    # Perfect correlation should give 1.0
+    assert_allclose(out[2, 0, 1], 1.0)
+    assert_allclose(out[2, 1, 2], 1.0)
+    assert_allclose(out[2, 0, 2], 1.0)
+
+
+def test_move_exp_nancorrmat_min_weight():
+    # Test min_weight behavior
+    arr = np.ones((10, 3))  # (n,k) shape
+    alpha = 0.1
+
+    # With min_weight=0, should have values everywhere after first point
+    out = move_exp_nancorrmat(arr, alpha=alpha, min_weight=0.0)
+    assert np.all(~np.isnan(out[1:]))
+
+    # With high min_weight, should have NaNs at the start
+    out = move_exp_nancorrmat(arr, alpha=alpha, min_weight=0.9)
+    assert np.all(np.isnan(out[:9]))
+    assert np.all(~np.isnan(out[9:]))
+
+
+def test_move_exp_nancorrmat_alpha_array():
+    # Test with array of alphas
+    arr = np.ones((10, 3))  # (n,k) shape
+    alphas = np.full(10, 0.1)  # array of constant alpha
+
+    # Results should be the same with scalar or array alpha
+    out1 = move_exp_nancorrmat(arr, alpha=0.1, min_weight=0.0)
+    out2 = move_exp_nancorrmat(arr, alpha=alphas, min_weight=0.0)
+    assert_allclose(out1, out2)
+
+
+@pytest.mark.parametrize("alpha", [0.1, 0.5, 0.9])
+def test_move_exp_nancorrmat_constant_data(alpha):
+    # Test with constant data (should be undefined correlation)
+    arr = np.full((10, 3), 1.0)  # (n,k) shape
+    out = move_exp_nancorrmat(arr, alpha=alpha, min_weight=0.0)
+    # Off-diagonal elements should be NaN (correlation undefined for constant data)
+    assert np.all(np.isnan(out[:, 0, 1]))
+    assert np.all(np.isnan(out[:, 1, 2]))
+    assert np.all(np.isnan(out[:, 0, 2]))
+    # Diagonal elements should still be 1.0
+    assert np.all(out[:, 0, 0] == 1.0)
+    assert np.all(out[:, 1, 1] == 1.0)
+    assert np.all(out[:, 2, 2] == 1.0)
 
 
 @pytest.mark.parametrize(
