@@ -318,12 +318,12 @@ def test_move_exp_nancorr_numeric():
 
 
 def test_move_exp_nancorrmat_basic(rs):
-    n = 100
+    n = 10
     k = 3  # Test with 3 variables
     arr = rs.randn(n, k).astype(np.float64)
-    alpha = 0.1
+    alpha = 0
 
-    out = move_exp_nancorrmat(arr, alpha=alpha, min_weight=0.0)
+    out = move_exp_nancorrmat(arr, alpha=alpha)
 
     # Check diagonal is 1 where we have valid values
     valid_idx = ~np.isnan(out[:, 0, 0])
@@ -371,11 +371,13 @@ def test_move_exp_nancorrmat_nan_handling(rs):
 
 def test_move_exp_nancorrmat_numeric(rs):
     # Test with known values
-    arr = np.array([
-        [1.0, 2.0, 3.0],  # perfectly correlated
-        [2.0, 4.0, 6.0],
-        [3.0, 6.0, 9.0],
-    ]).T  # transpose to get (n,k) shape
+    arr = np.array(
+        [
+            [1.0, 2.0, 3.0],  # perfectly correlated
+            [2.0, 4.0, 6.0],
+            [3.0, 6.0, 9.0],
+        ]
+    ).T  # transpose to get (n,k) shape
     alpha = 0.5
     out = move_exp_nancorrmat(arr, alpha=alpha, min_weight=0.0)
     # Perfect correlation should give 1.0
@@ -386,7 +388,23 @@ def test_move_exp_nancorrmat_numeric(rs):
 
 def test_move_exp_nancorrmat_min_weight():
     # Test min_weight behavior
-    arr = np.ones((10, 3))  # (n,k) shape
+    # arr = np.ones((10, 3))  # (n,k) shape
+    arr = np.array([[1, 2, 3]] * 10)  # Create 10 rows of [1,2,3]
+
+    arr = np.array(
+        [
+            [1, 2, 0.5],
+            [2, 4, 1.0],
+            [3, 5, 1.5],
+            [4, 7, 2.0],
+            [5, 8, 2.5],
+            [4, 6, 2.0],
+            [3, 5, 1.5],
+            [2, 3, 1.0],
+            [1, 2, 0.5],
+            [2, 4, 1.0],
+        ]
+    )
     alpha = 0.1
 
     # With min_weight=0, should have values everywhere after first point

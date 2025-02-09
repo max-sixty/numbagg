@@ -309,9 +309,11 @@ class ndmoveexp(NumbaBaseSimple):
         *arr: np.ndarray,
         alpha: float | np.ndarray,
         min_weight: float = 0,
-        axis: int = -1,
+        axis: int | tuple[int, ...] = -1,
         **kwargs,
     ):
+        if isinstance(axis, tuple):
+            axis = axis[0]
         if not isinstance(alpha, np.ndarray):
             alpha = np.broadcast_to(alpha, arr[0].shape[axis])  # type: ignore[assignment,unused-ignore]
             alpha_axis = -1
@@ -370,44 +372,37 @@ class ndmoveexpmat(ndmoveexp):
 
     def __call__(
         self,
+        # For inheritance we type this as `*arr`, but it's always a single array
         *arr: np.ndarray,
         alpha: float | np.ndarray,
         min_weight: float = 0,
-        axis: int = -1,
+        # The axes of (time, value) for the input array
+        axis: int | tuple[int, ...] = (-2, -1),
         **kwargs,
     ):
+        (array,) = arr
+
+        if not isinstance(axis, tuple) or len(axis) != 2:
+            raise ValueError(f"Only two axes can be passed to {self.func}; got {axis}")
+
         if not isinstance(alpha, np.ndarray):
-            alpha = np.broadcast_to(alpha, arr[-1].shape[axis])  # type: ignore[assignment,unused-ignore]
+            alpha = np.broadcast_to(alpha, array.shape[axis[0]])  # type: ignore[assignment,unused-ignore]
             alpha_axis = -1
         elif alpha.ndim == 1:
             alpha_axis = -1
-        else:
-            alpha_axis = axis
-
-        if isinstance(axis, tuple):
-            if axis == ():
-                if len(arr) > 1:
-                    raise ValueError(
-                        "`axis` cannot be an empty tuple when passing more than one array; since we default to returning the input."
-                    )
-                return arr[0]
-            if len(axis) > 1:
+            if alpha.shape[alpha_axis] != array.shape[axis[0]]:
                 raise ValueError(
-                    f"Only one axis can be passed to {self.func}; got {axis}"
+                    f"Alpha length {alpha.shape[0]} must match time dimension {array.shape[axis[0]]}"
                 )
-            (axis,) = axis
+        else:
+            raise ValueError("Alpha must be scalar or 1D array")
 
         # For matrix operations with shape (t,k), we need:
         # - input array: (t,k)
         # - alpha: (t,)
         # - min_weight: scalar
-        # - output: (t,k,k)
-        axes = [(-2, -1), (-1,), (), (-3, -2, -1)]
-
-        # Axes is `axis` for each array (most often just one array), and then either
-        # `-1` or `axis` for alphas, depending on whether a full array was passed or not.
-        # Then `()` for the min_weight, and `axis` for the output
-        # axes = [axis for _ in range(len(arr))] + [alpha_axis, (), axis]
+        # - output: (t,k,k), where the additional `k` is appended to the output shape
+        axes = [axis, alpha_axis, (), (*[a - 1 for a in axis], -1)]
 
         # For the sake of speed, we ignore divide-by-zero and NaN warnings, and test for
         # their correct handling in our tests.
@@ -418,9 +413,7 @@ class ndmoveexpmat(ndmoveexp):
     @cache
     def gufunc(self, *, target):
         # For matrix outputs, we need a custom signature that indicates the additional dimensions
-        # The signature will look like "(n),(n),(n),()->(n,m,m)" where m is the matrix size
-        # For matrix outputs, if input is (n,k), output should be (n,k,k)
-        # This creates a signature like "(n,k),(n,k),(n),()->(n,k,k)"
+        # This creates a signature like "(n,k),(n),(),()->(n,k,k)"
 
         logger.warning(f"Compiling gufunc with signature: {self.gufunc_signature}")
 

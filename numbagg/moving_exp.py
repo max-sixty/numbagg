@@ -349,10 +349,11 @@ def move_exp_nancorrmat(arr, alpha, min_weight, out):
                     out[i, k, j] = out[i, j, k] = np.nan
                     continue
 
-                # The bias cancels out in correlation, but we keep the check for consistency
-                bias = 1 - sum_weights_2[k, j] / (sum_weights[k, j] ** 2)
+                # # The bias cancels out in correlation, but we keep the check for consistency
+                # bias = 1 - sum_weights_2[k, j] / (sum_weights[k, j] ** 2)
 
-                if weights[k, j] >= min_weight and bias > 0:
+                # if weights[k, j] >= min_weight and bias > 0:
+                if weights[k, j] >= min_weight:
                     # Compute variances and covariance
                     var_k = sum_sqs[k] - (sums[k] ** 2 / sum_weights[k, j])
                     var_j = sum_sqs[j] - (sums[j] ** 2 / sum_weights[k, j])
@@ -361,14 +362,8 @@ def move_exp_nancorrmat(arr, alpha, min_weight, out):
                     # Compute correlation if possible
                     denominator = np.sqrt(var_k * var_j)
                     if denominator > 0:
-                        if k == j:  # Diagonal elements are 1.0 if we have valid data
-                            out[i, k, k] = 1.0
-                        else:
-                            corr = cov / denominator
-                            if abs(corr) > 1e-14:  # Only set non-zero correlations
-                                out[i, k, j] = out[i, j, k] = corr
-                            else:
-                                out[i, k, j] = out[i, j, k] = np.nan
+                        corr = cov / denominator
+                        out[i, k, j] = out[i, j, k] = corr
                     else:
                         out[i, k, j] = out[i, j, k] = np.nan
                 else:
